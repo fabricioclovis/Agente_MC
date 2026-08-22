@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 DB_PATH = 'estoque.db'
 
-app = FastAPI()
+app = FastAPI(title="McDonald's Estoque Manager")
 
 
 def inicializar_banco_de_dados() -> None:
@@ -23,15 +23,16 @@ def inicializar_banco_de_dados() -> None:
         """)
         cursor.execute("SELECT COUNT(*) FROM produtos")
         if cursor.fetchone()[0] == 0:
-            produtos_teste = [
-                (1, 'Notebook Pro', 4500.00, 15),
-                (2, 'Mouse sem fio', 120.50, 50),
-                (3, 'Teclado Mecanico', 350.00, 30),
+            produtos_mcdonalds = [
+                (1, 'Big Mac', 29.90, 50),
+                (2, 'McFritas Grande', 14.90, 120),
+                (3, 'Coca-Cola 500ml', 10.90, 80),
+                (4, 'McFlurry M&Ms', 16.90, 40),
             ]
             cursor.executemany("""
                 INSERT INTO produtos (id, nome, preco, quantidade_estoque) 
                 VALUES (?, ?, ?, ?)
-            """, produtos_teste)
+            """, produtos_mcdonalds)
             conn.commit()
 
 
@@ -70,29 +71,46 @@ def atualizar_estoque(item_id: int, quantidade: int) -> bool:
         return False
 
 
+ESTILO_MCDONALDS = """
+<style>
+    body { font-family: 'Arial', sans-serif; background-color: #27251F; margin: 0; padding: 20px; color: #333; }
+    .card { max-width: 480px; background: white; margin: 30px auto; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 16px rgba(0,0,0,0.4); border: 3px solid #FFC72C; }
+    .header { background-color: #DA291C; padding: 20px; text-align: center; color: #FFC72C; }
+    .header h1 { margin: 0; font-size: 28px; text-shadow: 1px 1px 2px #000; font-weight: bold; }
+    .content { padding: 25px; background: #FFF; }
+    input { width: 100%; padding: 12px; margin: 10px 0; box-sizing: border-box; border: 2px solid #DDD; border-radius: 6px; font-size: 16px; }
+    button { width: 100%; background-color: #FFC72C; color: #27251F; padding: 14px; border: none; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 16px; text-transform: uppercase; transition: 0.2s; }
+    button:hover { background-color: #e6b020; }
+    .badge { background: #DA291C; color: white; padding: 4px 8px; border-radius: 4px; font-size: 14px; display: inline-block; }
+    a { display: block; text-align: center; margin-top: 15px; color: #DA291C; font-weight: bold; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+</style>
+"""
+
+
 @app.get("/", response_class=HTMLResponse)
 def home():
-    return """
+    return f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Gerenciador de Estoque</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f4f9; }
-            .container { max-width: 500px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: auto; }
-            input, button { padding: 12px; margin: 8px 0; width: 100%; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; }
-            button { background-color: #28a745; color: white; border: none; font-weight: bold; cursor: pointer; }
-            button:hover { background-color: #218838; }
-        </style>
+        <title>McEstoque - McDonald's</title>
+        {ESTILO_MCDONALDS}
     </head>
     <body>
-        <div class="container">
-            <h2>🔍 Pesquisar Produto</h2>
-            <form action="/buscar" method="post">
-                <label>Digite o ID do Produto (ex: 1, 2, 3):</label>
-                <input type="number" name="item_id" required placeholder="ID do produto">
-                <button type="submit">Buscar no Estoque</button>
-            </form>
+        <div class="card">
+            <div class="header">
+                <h1>🍟 McEstoque</h1>
+                <p style="margin: 5px 0 0 0; color: white;">Sistema de Controle do Cardápio</p>
+            </div>
+            <div class="content">
+                <h2>🔍 Buscar Produto no Cardápio</h2>
+                <form action="/buscar" method="post">
+                    <label>Informe o ID do Produto (1: Big Mac, 2: McFritas, 3: Refri, 4: McFlurry):</label>
+                    <input type="number" name="item_id" required placeholder="ID do produto">
+                    <button type="submit">Consultar Estoque</button>
+                </form>
+            </div>
         </div>
     </body>
     </html>
@@ -104,42 +122,40 @@ def buscar(item_id: int = Form(...)):
     produto = consultar_produto(item_id)
 
     if produto:
-        card = f"""
-        <div style="background: #e9ecef; padding: 15px; border-radius: 5px; margin-top: 15px;">
-            <h3>📦 {produto['nome']}</h3>
-            <p><strong>ID:</strong> {produto['id']}</p>
+        resultado_html = f"""
+        <div style="background: #FFF8E7; border-left: 5px solid #FFC72C; padding: 15px; margin-bottom: 20px;">
+            <h3 style="margin-top: 0; color: #DA291C;">🍔 {produto['nome']}</h3>
+            <p><strong>ID:</strong> <span class="badge">#{produto['id']}</span></p>
             <p><strong>Preço:</strong> R$ {produto['preco']:.2f}</p>
-            <p><strong>Quantidade em Estoque:</strong> {produto['quantidade_estoque']} unidades</p>
-            <hr>
-            <h4>✏️ Atualizar Estoque</h4>
-            <form action="/atualizar" method="post">
-                <input type="hidden" name="item_id" value="{produto['id']}">
-                <input type="number" name="quantidade" placeholder="Nova quantidade" required>
-                <button type="submit" style="background-color: #007bff;">Salvar Nova Quantidade</button>
-            </form>
+            <p><strong>Estoque no Restaurante:</strong> <span style="font-size: 18px; color: #DA291C; font-weight: bold;">{produto['quantidade_estoque']} un</span></p>
         </div>
+
+        <h3 style="color: #27251F;">✏️ Atualizar Estoque</h3>
+        <form action="/atualizar" method="post">
+            <input type="hidden" name="item_id" value="{produto['id']}">
+            <input type="number" name="quantidade" placeholder="Digite o novo saldo" required>
+            <button type="submit" style="background-color: #DA291C; color: white;">Salvar Novo Estoque</button>
+        </form>
         """
     else:
-        card = "<p style='color: red;'>❌ Produto não encontrado no banco de dados.</p>"
+        resultado_html = "<p style='color: #DA291C; font-weight: bold;'>❌ Produto não encontrado no cardápio do McDonald's!</p>"
 
     return f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Resultado</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 40px; background-color: #f4f4f9; }}
-            .container {{ max-width: 500px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: auto; }}
-            input, button {{ padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; }}
-            button {{ color: white; border: none; font-weight: bold; cursor: pointer; }}
-            a {{ display: inline-block; margin-top: 15px; color: #007bff; text-decoration: none; }}
-        </style>
+        <title>Resultado - McEstoque</title>
+        {ESTILO_MCDONALDS}
     </head>
     <body>
-        <div class="container">
-            <h2>Resultado da Pesquisa</h2>
-            {card}
-            <a href="/">← Voltar para a Pesquisa</a>
+        <div class="card">
+            <div class="header">
+                <h1>🍟 McEstoque</h1>
+            </div>
+            <div class="content">
+                {resultado_html}
+                <a href="/">← Voltar para a busca</a>
+            </div>
         </div>
     </body>
     </html>
@@ -150,25 +166,27 @@ def buscar(item_id: int = Form(...)):
 def atualizar(item_id: int = Form(...), quantidade: int = Form(...)):
     sucesso = atualizar_estoque(item_id, quantidade)
     msg = (
-        "✅ Estoque atualizado com sucesso!"
+        "✅ Estoque do McDonald's atualizado com sucesso!"
         if sucesso
-        else "❌ Falha ao atualizar."
+        else "❌ Falha ao atualizar estoque."
     )
 
     return f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 40px; background-color: #f4f4f9; }}
-            .container {{ max-width: 500px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: auto; }}
-            a {{ display: inline-block; margin-top: 15px; color: #007bff; text-decoration: none; }}
-        </style>
+        <title>Status - McEstoque</title>
+        {ESTILO_MCDONALDS}
     </head>
     <body>
-        <div class="container">
-            <h3>{msg}</h3>
-            <a href="/">← Voltar para a Pesquisa</a>
+        <div class="card">
+            <div class="header">
+                <h1>🍟 McEstoque</h1>
+            </div>
+            <div class="content" style="text-align: center;">
+                <h3 style="color: #27251F;">{msg}</h3>
+                <a href="/">← Voltar ao Início</a>
+            </div>
         </div>
     </body>
     </html>
