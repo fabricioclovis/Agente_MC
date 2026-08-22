@@ -1,17 +1,18 @@
-import sqlite3
 import logging
-from typing import Optional, Dict, Union
+import os
+import sqlite3
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from typing import Dict, Optional, Union
 
+# Configuração básica de log
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-# Mantemos na raiz do projeto. Ele será recriado a cada reinício do Render.
-DB_PATH = 'estoque.db' 
+# Caminho do banco de dados na raiz do projeto
+DB_PATH = 'estoque.db'
+
 
 def inicializar_banco_de_dados() -> None:
-    """
-    Cria a tabela 'produtos' no banco SQLite e insere dados de teste,
-    caso a tabela ainda não exista.
-    """
+    """Cria a tabela 'produtos' no SQLite e insere dados de teste se a tabela estiver vazia."""
     try:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
@@ -23,91 +24,95 @@ def inicializar_banco_de_dados() -> None:
                     quantidade_estoque INTEGER NOT NULL
                 )
             """)
-            
-            # Inserção de dados de teste (apenas se a tabela estiver vazia)
+
             cursor.execute("SELECT COUNT(*) FROM produtos")
             if cursor.fetchone()[0] == 0:
                 produtos_teste = [
                     (1, 'Notebook Pro', 4500.00, 15),
                     (2, 'Mouse sem fio', 120.50, 50),
-                    (3, 'Teclado Mecânico', 350.00, 30)
+                    (3, 'Teclado Mecanico', 350.00, 30),
                 ]
                 cursor.executemany("""
                     INSERT INTO produtos (id, nome, preco, quantidade_estoque) 
                     VALUES (?, ?, ?, ?)
                 """, produtos_teste)
                 logging.info("Dados de teste inseridos com sucesso.")
-            
+
             conn.commit()
     except sqlite3.Error as e:
         logging.error(f"Erro ao inicializar o banco de dados: {e}")
 
-def consultar_produto(item_id: int) -> Optional[Dict[str, Union[int, str, float]]]:
-    """
-    Consulta as informações de um produto específico no banco de dados.
 
-    Args:
-        item_id (int): O identificador único do produto.
-
-    Returns:
-        dict: Um dicionário com os dados do produto (id, nome, preco, quantidade_estoque).
-        None: Se o produto não for encontrado ou ocorrer um erro.
-    """
+def consultar_produto(
+    item_id: int,
+) -> Optional[Dict[str, Union[int, str, float]]]:
+    """Consulta um produto especifico pelo seu ID."""
     try:
         with sqlite3.connect(DB_PATH) as conn:
-            conn.row_factory = sqlite3.Row  # Permite acessar as colunas por nome
+            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM produtos WHERE id = ?", (item_id,))
             resultado = cursor.fetchone()
-            
+
             if resultado:
                 return dict(resultado)
             else:
-                logging.warning(f"Produto com ID {item_id} não encontrado.")
+                logging.warning(f"Produto com ID {item_id} nao encontrado.")
                 return None
     except sqlite3.Error as e:
         logging.error(f"Erro ao consultar produto (ID: {item_id}): {e}")
         return None
 
+
 def atualizar_estoque(item_id: int, quantidade: int) -> bool:
-    """
-    Atualiza a quantidade em estoque de um produto específico.
-
-    Args:
-        item_id (int): O identificador único do produto.
-        quantidade (int): A nova quantidade total em estoque.
-
-    Returns:
-        bool: True se a atualização foi bem-sucedida, False caso contrário.
-    """
+    """Atualiza a quantidade em estoque de um produto."""
     try:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
-            
-            # Verifica se o produto existe antes de atualizar
+
             cursor.execute("SELECT id FROM produtos WHERE id = ?", (item_id,))
             if not cursor.fetchone():
-                logging.warning(f"Falha na atualização: Produto com ID {item_id} não existe.")
+                logging.warning(
+                    f"Falha: Produto com ID {item_id} nao existe."
+                )
                 return False
-                
-            cursor.execute("""
+
+            cursor.execute(
+                """
                 UPDATE produtos 
                 SET quantidade_estoque = ? 
                 WHERE id = ?
-            """, (quantidade, item_id))
-            
+            """,
+                (quantidade, item_id),
+            )
+
             conn.commit()
-            logging.info(f"Estoque do produto {item_id} atualizado para {quantidade} unidades.")
+            logging.info(
+                f"Estoque do produto {item_id} atualizado para {quantidade} unidades."
+            )
             return True
     except sqlite3.Error as e:
         logging.error(f"Erro ao atualizar estoque (ID: {item_id}): {e}")
         return False
 
-# Execução principal para inicialização e testes locais
+
+def iniciar_servidor_web() -> None:
+    """Inicia um servidor HTTP simples para manter a aplicacao ativa no Render."""
+    port = int(os.environ.get("PORT", 10000))
+    server_address = ("", port)
+    httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
+    logging.info(f"Servidor web ativo na porta {port}")
+    httpd.serve_forever()
+
+
 if __name__ == "__main__":
+    # 1. Cria a base e insere os dados
     inicializar_banco_de_dados()
-    
-    # Exemplo de uso das ferramentas
+
+    # 2. Executa testes de leitura e atualizacao
     print(consultar_produto(1))
     atualizar_estoque(1, 20)
     print(consultar_produto(1))
+
+    # 3. Mantem o processo rodando para o Render (sempre no final)
+    iniciar_servidor_web()
